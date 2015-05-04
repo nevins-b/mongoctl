@@ -1,7 +1,9 @@
 package command
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -12,12 +14,30 @@ type InitCommand struct {
 }
 
 func (c *InitCommand) Run(args []string) int {
+	var username string
+	flags := c.Meta.FlagSet("init", FlagSetDefault)
+	flags.Usage = func() { c.Ui.Error(c.Help()) }
+	flags.StringVar(&username, "username", "", "")
+
+	if err := flags.Parse(args); err != nil {
+		return 1
+	}
+
 	node, err := c.Meta.GetNode()
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
-	session, err := mgo.Dial(node)
+	info := &mgo.DialInfo{
+		Addrs:    []string{node},
+		Timeout:  5 * time.Second,
+		Username: username,
+	}
+
+	if len(username) > 0 {
+		info.Password, _ = c.Ui.Ask("Password: ")
+	}
+	session, err := mgo.DialWithInfo(info)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -36,13 +56,15 @@ func (c *InitCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
+	out := fmt.Sprintf("%v", result)
+	c.Ui.Output(out)
 	return 0
 }
 
 func (c *InitCommand) Help() string {
 	helpText := `
-Usage: vault init [options]
-  Initialize a new Vault server.
+Usage: mongoctl init [options]
+  Initialize a new MongoDB Cluster
   This command connects to a Vault server and initializes it for the
   first time. This sets up the initial set of master keys and sets up the
   backend data store structure.
@@ -57,11 +79,6 @@ General Options:
   -insecure               Do not verify TLS certificate. This is highly
                           not recommended. This is especially not recommended
                           for unsealing a vault.
-Init Options:
-  -key-shares=5           The number of key shares to split the master key
-                          into.
-  -key-threshold=3        The number of key shares required to reconstruct
-                          the master key.
 `
 	return strings.TrimSpace(helpText)
 }

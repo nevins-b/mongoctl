@@ -1,9 +1,11 @@
 package command
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
-	"github.com/aocsolutions/mongo-automation/builtin/mongo"
+	"github.com/nevins-b/commgo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -15,11 +17,12 @@ type AddCommand struct {
 func (c *AddCommand) Run(args []string) int {
 	var priority int
 	var hidden, arbitrator bool
-	var addr string
+	var addr, username string
 	flags := c.Meta.FlagSet("add", FlagSetDefault)
 	flags.Usage = func() { c.Ui.Error(c.Help()) }
 	flags.IntVar(&priority, "priority", 1, "")
 	flags.StringVar(&addr, "addr", "127.0.0.1:27018", "")
+	flags.StringVar(&username, "username", "", "")
 	flags.BoolVar(&hidden, "hidden", false, "")
 	flags.BoolVar(&arbitrator, "arbitrator", false, "")
 	if err := flags.Parse(args); err != nil {
@@ -31,14 +34,24 @@ func (c *AddCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
-	session, err := mgo.Dial(node)
+
+	info := &mgo.DialInfo{
+		Addrs:    []string{node},
+		Timeout:  5 * time.Second,
+		Username: username,
+	}
+
+	if len(username) > 0 {
+		info.Password, _ = c.Ui.Ask("Password: ")
+	}
+	session, err := mgo.DialWithInfo(info)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
 
 	defer session.Close()
-	config := &mongo.MongoConfig{}
+	config := &commgo.RsConf{}
 	conn := session.DB("local").C("system.replset")
 	count, err := conn.Count()
 	if count > 1 {
@@ -55,12 +68,12 @@ func (c *AddCommand) Run(args []string) int {
 	var max int64
 	max = 0
 	for _, member := range config.Members {
-		if member.Id > max {
-			max = member.Id
+		if member.ID > max {
+			max = member.ID
 		}
 	}
-	cfg := &mongo.MongoClusterMember{
-		Id:          max + 1,
+	cfg := &commgo.Host{
+		ID:          max + 1,
 		Host:        addr,
 		ArbiterOnly: arbitrator,
 	}
@@ -74,6 +87,8 @@ func (c *AddCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
+	out := fmt.Sprintf("%v", result)
+	c.Ui.Output(out)
 	return 0
 }
 
