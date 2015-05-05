@@ -2,6 +2,7 @@ package command
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -69,8 +70,8 @@ func (m *Meta) FlagSet(n string, fs FlagSetFlags) *flag.FlagSet {
 	// FlagSetServer tells us to enable the settings for selecting
 	// the server information.
 	if fs&FlagSetServer != 0 {
-		f.StringVar(&m.consulServer, "consul-server", "", "")
-		f.StringVar(&m.consulKey, "consul-key", "", "")
+		f.StringVar(&m.consulServer, "consul-server", "127.0.0.1:8500", "")
+		f.StringVar(&m.consulKey, "consul-service", "", "")
 		f.BoolVar(&m.consul, "consul", false, "")
 		f.StringVar(&m.mongoServer, "mongo", "", "")
 	}
@@ -116,7 +117,21 @@ func (m *Meta) GetNode() (n string, err error) {
 	} else if len(m.mongoServer) != 0 {
 		node = m.mongoServer
 	} else {
-		node = "localhost"
+		node = "127.0.0.1:27017"
 	}
 	return node, nil
+}
+
+func (m *Meta) GetConsulCatalog() (catalog *api.Catalog, err error) {
+	if m.consul {
+		return m.cclient.Catalog(), nil
+	}
+	return nil, errors.New("Consul not configured")
+}
+
+func (m *Meta) GetConsulAgent() (agent *api.Agent, err error) {
+	if m.consul {
+		return m.cclient.Agent(), nil
+	}
+	return nil, errors.New("Consul not configured")
 }

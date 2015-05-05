@@ -57,22 +57,25 @@ func (c *StatusCommand) Run(args []string) int {
 
 func (c *StatusCommand) Help() string {
 	helpText := `
-Usage: mongoctl init [options]
-  Initialize a new MongoDB Cluster
-  This command connects to a Vault server and initializes it for the
-  first time. This sets up the initial set of master keys and sets up the
-  backend data store structure.
-  This command can't be called on an already-initialized Vault.
+Usage: mongoctl status [options]
+  Get the status of a Mongo Cluster
+  This command connects to a Mongo server and retrieves the status
+	of the cluster.
+
 General Options:
-  -address=addr           The address of the Vault server.
-  -ca-cert=path           Path to a PEM encoded CA cert file to use to
-                          verify the Vault server SSL certificate.
-  -ca-path=path           Path to a directory of PEM encoded CA cert files
-                          to verify the Vault server SSL certificate. If both
-                          -ca-cert and -ca-path are specified, -ca-path is used.
-  -insecure               Do not verify TLS certificate. This is highly
-                          not recommended. This is especially not recommended
-                          for unsealing a vault.
+  -mongo=addr             The address of the Mongo server if not using Consul.
+
+  -consul-service=service The service name to use when looking up Mongo
+	                        with consul.
+
+	-consul-server=addr			The address of the consul server to use,
+	                        this defaults to 127.0.0.1:8500.
+  -consul                 Use consul to find Mongo
+
+Status Options:
+
+	-username=username      The username to authenticate with if required.
+
 `
 	return strings.TrimSpace(helpText)
 }

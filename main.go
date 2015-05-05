@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/aocsolutions/mongo-automation/cli"
+	"github.com/aocsolutions/mongoctl/cli"
 )
 
 func main() {

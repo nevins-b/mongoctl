@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,13 +10,13 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type InitCommand struct {
+type CleanCommand struct {
 	Meta
 }
 
-func (c *InitCommand) Run(args []string) int {
+func (c *CleanCommand) Run(args []string) int {
 	var username string
-	flags := c.Meta.FlagSet("init", FlagSetDefault)
+	flags := c.Meta.FlagSet("clean", FlagSetDefault)
 	flags.Usage = func() { c.Ui.Error(c.Help()) }
 	flags.StringVar(&username, "username", "", "")
 
@@ -32,7 +33,6 @@ func (c *InitCommand) Run(args []string) int {
 		Addrs:    []string{node},
 		Timeout:  5 * time.Second,
 		Username: username,
-		Direct:   true,
 	}
 
 	if len(username) > 0 {
@@ -44,9 +44,47 @@ func (c *InitCommand) Run(args []string) int {
 		return 1
 	}
 
-	// This needs to be set since we are working
-	// with a single node not a cluster yet
-	session.SetMode(mgo.Monotonic, true)
+	nodeList := session.LiveServers()
+	catalog, err := c.Meta.GetConsulCatalog()
+	if err != nil {
+		c.Ui.Error(err.Error())
+		return 1
+	}
+
+	registered, _, err := catalog.Service(c.Meta.consulKey, "", nil)
+	if err != nil {
+		c.Ui.Error(err.Error())
+		return 1
+	}
+
+	agent, err := c.Meta.GetConsulAgent()
+	if err != nil {
+		c.Ui.Error(err.Error())
+		return 1
+	}
+
+	for _, node := range registered {
+		found := false
+		for _, r := range nodeList {
+			parts := strings.Split(r, ":")
+			if len(parts) != 2 {
+				c.Ui.Error(fmt.Sprintf("Can not parse node %s", r))
+				continue
+			}
+			host := parts[0]
+			port, _ := strconv.Atoi(parts[1])
+			if node.ServiceAddress == host && node.ServicePort == port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			err := agent.ServiceDeregister(node.ServiceID)
+			if err != nil {
+				c.Ui.Error(err.Error())
+			}
+		}
+	}
 
 	defer session.Close()
 	cmd := &bson.M{
@@ -62,11 +100,12 @@ func (c *InitCommand) Run(args []string) int {
 	return 0
 }
 
-func (c *InitCommand) Help() string {
+func (c *CleanCommand) Help() string {
 	helpText := `
-Usage: mongoctl init [options]
-  Initialize a new Mongo Replica Set.
-  This command connects to a Mongo server and initilizes a cluster.
+Usage: mongoctl clean [options]
+  Get the status of a Mongo Cluster
+  This command connects to a Mongo server and retrieves the status
+	of the cluster.
 
 General Options:
   -mongo=addr             The address of the Mongo server if not using Consul.
@@ -78,14 +117,13 @@ General Options:
 	                        this defaults to 127.0.0.1:8500.
   -consul                 Use consul to find Mongo
 
-Init Options:
+Clean Options:
 
 	-username=username      The username to authenticate with if required.
-
 `
 	return strings.TrimSpace(helpText)
 }
 
-func (c *InitCommand) Synopsis() string {
+func (c *CleanCommand) Synopsis() string {
 	return "Initilize a new replica set"
 }

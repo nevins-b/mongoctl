@@ -3,7 +3,7 @@ package cli
 import (
 	"os"
 
-	"github.com/aocsolutions/mongo-automation/command"
+	"github.com/aocsolutions/mongoctl/command"
 	"github.com/mitchellh/cli"
 )
 
