@@ -21,6 +21,7 @@ const (
 	FlagSetNone    FlagSetFlags = 0
 	FlagSetServer  FlagSetFlags = 1 << iota
 	FlagSetDefault              = FlagSetServer
+	ec2MetadataURI              = "http://169.254.169.254/latest/meta-data/local-ipv4"
 )
 
 // Meta contains the meta-options and functionality that nearly every
