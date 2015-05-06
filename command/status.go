@@ -81,5 +81,5 @@ Status Options:
 }
 
 func (c *StatusCommand) Synopsis() string {
-	return "Initilize a new replica set"
+	return "Get the status of a Mongo Cluster"
 }

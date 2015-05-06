@@ -2,6 +2,9 @@ package command
 
 import (
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -11,13 +14,15 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+const ec2MetadataURI = "http://169.254.169.254/latest/meta-data/local-ipv4"
+
 type AddCommand struct {
 	Meta
 }
 
 func (c *AddCommand) Run(args []string) int {
 	var priority, port int
-	var hidden, arbitrator bool
+	var hidden, arbitrator, ec2 bool
 	var addr, username string
 	flags := c.Meta.FlagSet("add", FlagSetDefault)
 	flags.Usage = func() { c.Ui.Error(c.Help()) }
@@ -27,16 +32,40 @@ func (c *AddCommand) Run(args []string) int {
 	flags.StringVar(&username, "username", "", "")
 	flags.BoolVar(&hidden, "hidden", false, "")
 	flags.BoolVar(&arbitrator, "arbitrator", false, "")
+	flags.BoolVar(&ec2, "ec2", false, "")
 	if err := flags.Parse(args); err != nil {
 		return 1
 	}
 
+	if len(addr) == 0 && ec2 {
+		resp, err := http.Get(ec2MetadataURI)
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+
+		out, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+
+		addr = string(out)
+		_, err = net.ResolveIPAddr("ip", addr)
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+	}
+
 	node, err := c.Meta.GetNode()
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
 
+	c.Ui.Info(fmt.Sprintf("Adding %s:%d to Cluster %s", addr, port, node))
 	info := &mgo.DialInfo{
 		Addrs:    []string{node},
 		Timeout:  5 * time.Second,
@@ -48,7 +77,7 @@ func (c *AddCommand) Run(args []string) int {
 	}
 	session, err := mgo.DialWithInfo(info)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
 
@@ -58,12 +87,12 @@ func (c *AddCommand) Run(args []string) int {
 	conn := session.DB("local").C("system.replset")
 	count, err := conn.Count()
 	if count > 1 {
-		c.Ui.Error("error: local.system.replset has unexpected contents")
+		c.Ui.Error("Error: local.system.replset has unexpected contents")
 		return 1
 	}
 	err = conn.Find(bson.M{}).One(&config)
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
 	config.Version++
@@ -88,9 +117,10 @@ func (c *AddCommand) Run(args []string) int {
 	}
 	result := bson.M{}
 	if err := session.DB("admin").Run(&cmd, &result); err != nil {
-		c.Ui.Error(err.Error())
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
+
 	if c.Meta.consul {
 		agent, err := c.Meta.GetConsulAgent()
 		if err != nil {
@@ -110,7 +140,7 @@ func (c *AddCommand) Run(args []string) int {
 		}
 		err = agent.ServiceRegister(service)
 		if err != nil {
-			c.Ui.Error(err.Error())
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 			return 1
 		}
 	}
@@ -122,36 +152,41 @@ func (c *AddCommand) Help() string {
 Usage: mongoctl add [options]
   Add a node to an existing Mongo Replica Set.
   This command connects to a Mongo server and adds the specified host to an
-	existing cluster. If consul is specified this command will also register
-	the added host to the Mongo service in consul.
+  existing cluster. If consul is specified this command will also register
+  the added host to the Mongo service in consul.
 
 General Options:
   -mongo=addr             The address of the Mongo server if not using Consul.
 
   -consul-service=service The service name to use when looking up Mongo
-	                        with consul.
+                          with consul.
 
-	-consul-server=addr			The address of the consul server to use,
-	                        this defaults to 127.0.0.1:8500.
+  -consul-server=addr     The address of the consul server to use,
+                          this defaults to 127.0.0.1:8500.
   -consul                 Use consul to find Mongo
 
 Init Options:
 
-	-username=username      The username to authenticate with if required.
+  -username=username      The username to authenticate with if required.
 
-	-addr=addr							The address of the host to add.
+  -addr=addr              The address of the host to add.
 
-	-port=port							The port of the host to add.
-													Defaults to 27017.
+  -port=port              The port of the host to add.
+                          Defaults to 27017.
 
-	-priority=priority			The priority of the host to add.
-													Defaults to 1.
+  -priority=priority      The priority of the host to add.
+                          Defaults to 1.
 
-	-hidden									If the host should be added hidden.
-													Defaults to False.
+  -hidden                 If the host should be added hidden.
+                          Defaults to False.
 
-	-arbitrator							If the host should be added as an arbitrator.
-													Defaults to False.
+  -arbitrator             If the host should be added as an arbitrator.
+                          Defaults to False.
+
+  -ec2                    If the host to be added is an EC2 instance.
+                          This can be used to discover the address of the
+                          instance to add, assuming the command is run on the
+													instance that is being added.
 `
 	return strings.TrimSpace(helpText)
 }

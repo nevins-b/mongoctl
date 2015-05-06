@@ -13,13 +13,8 @@ import (
 // HelpFunc is a cli.HelpFunc that can is used to output the help for Vault.
 func HelpFunc(commands map[string]cli.CommandFactory) string {
 	commonNames := map[string]struct{}{
-		"delete": struct{}{},
+		"add":    struct{}{},
 		"help":   struct{}{},
-		"read":   struct{}{},
-		"renew":  struct{}{},
-		"revoke": struct{}{},
-		"write":  struct{}{},
-		"server": struct{}{},
 		"status": struct{}{},
 	}
 
@@ -40,7 +35,7 @@ func HelpFunc(commands map[string]cli.CommandFactory) string {
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString("usage: vault [-version] [-help] <command> [args]\n\n")
+	buf.WriteString("usage: mongoctl [-version] [-help] <command> [args]\n\n")
 	buf.WriteString("Common commands:\n")
 	buf.WriteString(listCommands(commonCommands, maxKeyLen))
 	buf.WriteString("\nAll other commands:\n")
