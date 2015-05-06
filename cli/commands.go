@@ -38,5 +38,10 @@ func Commands(metaPtr *command.Meta) map[string]cli.CommandFactory {
 				Meta: meta,
 			}, nil
 		},
+		"remote": func() (cli.Command, error) {
+			return &command.RemoveCommand{
+				Meta: meta,
+			}, nil
+		},
 	}
 }
