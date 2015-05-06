@@ -14,8 +14,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-const ec2MetadataURI = "http://169.254.169.254/latest/meta-data/local-ipv4"
-
 type AddCommand struct {
 	Meta
 }
