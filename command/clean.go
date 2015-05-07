@@ -24,7 +24,16 @@ func (c *CleanCommand) Run(args []string) int {
 		return 1
 	}
 
-	node, err := c.Meta.GetNode()
+	nodes, err := c.Meta.consulAgent.GetService(
+		c.Meta.consulKey,
+		"",
+	)
+	if err != nil {
+		c.Ui.Error(err.Error())
+		return 1
+	}
+	service := nodes[0]
+	node := fmt.Sprintf("%s:%d", service.ServiceAddress, service.ServicePort)
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -45,7 +54,7 @@ func (c *CleanCommand) Run(args []string) int {
 	}
 
 	nodeList := session.LiveServers()
-	catalog, err := c.Meta.GetConsulCatalog()
+	catalog, err := c.Meta.consulAgent.GetCatalog()
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
@@ -57,7 +66,7 @@ func (c *CleanCommand) Run(args []string) int {
 		return 1
 	}
 
-	agent, err := c.Meta.GetConsulAgent()
+	agent, err := c.Meta.consulAgent.GetAgent()
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1

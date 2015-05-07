@@ -2,13 +2,9 @@ package command
 
 import (
 	"fmt"
-	"io/ioutil"
-	"net"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/consul/api"
 	"github.com/nevins-b/commgo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -36,25 +32,12 @@ func (c *AddCommand) Run(args []string) int {
 	}
 
 	if len(addr) == 0 && ec2 {
-		resp, err := http.Get(ec2MetadataURI)
+		ip, err := c.Meta.GetLocalIP()
 		if err != nil {
 			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 			return 1
 		}
-
-		out, err := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
-			return 1
-		}
-
-		addr = string(out)
-		_, err = net.ResolveIPAddr("ip", addr)
-		if err != nil {
-			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
-			return 1
-		}
+		addr = ip
 	}
 
 	node, err := c.Meta.GetNode()
@@ -120,23 +103,13 @@ func (c *AddCommand) Run(args []string) int {
 	}
 
 	if c.Meta.consul {
-		agent, err := c.Meta.GetConsulAgent()
-		if err != nil {
-			c.Ui.Error(err.Error())
-			return 1
-		}
-		check := api.AgentServiceCheck{
-			Script:   fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
-			Interval: "15s",
-		}
-		service := &api.AgentServiceRegistration{
-			Address: addr,
-			Port:    port,
-			Name:    "mongodb",
-			ID:      fmt.Sprintf("%s:%d", addr, port),
-			Check:   &check,
-		}
-		err = agent.ServiceRegister(service)
+		err := c.Meta.consulAgent.AddService(
+			addr,
+			fmt.Sprintf("%s:%d", addr, port),
+			fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
+			"mongodb",
+			port,
+		)
 		if err != nil {
 			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 			return 1

@@ -116,12 +116,7 @@ func (c *RemoveCommand) Run(args []string) int {
 	}
 
 	if c.Meta.consul {
-		agent, err := c.Meta.GetConsulAgent()
-		if err != nil {
-			c.Ui.Error(err.Error())
-			return 1
-		}
-		err = agent.ServiceDeregister(host)
+		err = c.Meta.consulAgent.RemoveService(host)
 		if err != nil {
 			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 			return 1

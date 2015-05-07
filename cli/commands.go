@@ -38,8 +38,18 @@ func Commands(metaPtr *command.Meta) map[string]cli.CommandFactory {
 				Meta: meta,
 			}, nil
 		},
-		"remote": func() (cli.Command, error) {
+		"remove": func() (cli.Command, error) {
 			return &command.RemoveCommand{
+				Meta: meta,
+			}, nil
+		},
+		"clean": func() (cli.Command, error) {
+			return &command.CleanCommand{
+				Meta: meta,
+			}, nil
+		},
+		"initoradd": func() (cli.Command, error) {
+			return &command.InitOrAddCommand{
 				Meta: meta,
 			}, nil
 		},

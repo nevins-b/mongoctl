@@ -25,7 +25,7 @@ func (c *InitCommand) Run(args []string) int {
 
 	node, err := c.Meta.GetNode()
 	if err != nil {
-		c.Ui.Error(err.Error())
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
 	info := &mgo.DialInfo{
@@ -57,6 +57,27 @@ func (c *InitCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
+
+	if c.Meta.consul {
+		addr, err := c.Meta.GetLocalIP()
+		port := 27017
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+		err = c.Meta.consulAgent.AddService(
+			addr,
+			fmt.Sprintf("%s:%d", addr, port),
+			fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
+			"mongodb",
+			port,
+		)
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+	}
+
 	out := fmt.Sprintf("%v", result)
 	c.Ui.Output(out)
 	return 0
