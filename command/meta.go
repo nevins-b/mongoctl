@@ -103,7 +103,7 @@ func (m *Meta) GetNode() (node string, err error) {
 			return "", err
 		}
 		service := nodes[0]
-		return fmt.Sprintf("%s:%d", service.ServiceAddress, service.ServicePort), nil
+		return fmt.Sprintf("%s:%d", service.Address, service.ServicePort), nil
 	}
 	return m.mongoServer, nil
 }

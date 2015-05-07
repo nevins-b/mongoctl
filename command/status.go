@@ -50,8 +50,18 @@ func (c *StatusCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
-	out := fmt.Sprintf("%v", result)
-	c.Ui.Output(out)
+
+	c.Ui.Output("Node\t\tState\t\tLast Heartbeat")
+	for _, member := range result.Members {
+		var out string
+		if member.LastHeartbeat != nil {
+			out = fmt.Sprintf("%s\t\t%s\t\t%v", member.Name, member.StateStr, member.LastHeartbeat)
+		} else {
+			out = fmt.Sprintf("%s\t\t%s", member.Name, member.StateStr)
+		}
+
+		c.Ui.Output(out)
+	}
 	return 0
 }
 

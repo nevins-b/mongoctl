@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nevins-b/commgo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -24,20 +25,12 @@ func (c *CleanCommand) Run(args []string) int {
 		return 1
 	}
 
-	nodes, err := c.Meta.consulAgent.GetService(
-		c.Meta.consulKey,
-		"",
-	)
+	node, err := c.Meta.GetNode()
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
-	service := nodes[0]
-	node := fmt.Sprintf("%s:%d", service.ServiceAddress, service.ServicePort)
-	if err != nil {
-		c.Ui.Error(err.Error())
-		return 1
-	}
+
 	info := &mgo.DialInfo{
 		Addrs:    []string{node},
 		Timeout:  5 * time.Second,
@@ -52,60 +45,97 @@ func (c *CleanCommand) Run(args []string) int {
 		c.Ui.Error(err.Error())
 		return 1
 	}
+	defer session.Close()
 
-	nodeList := session.LiveServers()
-	catalog, err := c.Meta.consulAgent.GetCatalog()
+	registered, err := c.Meta.consulAgent.GetService(c.Meta.consulKey, "")
 	if err != nil {
 		c.Ui.Error(err.Error())
 		return 1
 	}
+	status := &commgo.RsStatus{}
+	cmd := &bson.M{
+		"replSetGetStatus": "",
+	}
 
-	registered, _, err := catalog.Service(c.Meta.consulKey, "", nil)
-	if err != nil {
-		c.Ui.Error(err.Error())
+	if err := session.DB("admin").Run(&cmd, &status); err != nil {
+		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
 
-	agent, err := c.Meta.consulAgent.GetAgent()
-	if err != nil {
-		c.Ui.Error(err.Error())
-		return 1
+	var live []*commgo.RsMemberStats
+	var dead []*commgo.RsMemberStats
+	for _, member := range status.Members {
+		if member.State == 8 {
+			dead = append(dead, member)
+		} else {
+			live = append(live, member)
+		}
 	}
 
+	// Clean up nodes which are not live but are in consul
 	for _, node := range registered {
 		found := false
-		for _, r := range nodeList {
-			parts := strings.Split(r, ":")
+		for _, member := range live {
+			parts := strings.Split(member.Name, ":")
 			if len(parts) != 2 {
-				c.Ui.Error(fmt.Sprintf("Can not parse node %s", r))
+				c.Ui.Error(fmt.Sprintf("Can not parse node name %s", member.Name))
 				continue
 			}
 			host := parts[0]
 			port, _ := strconv.Atoi(parts[1])
-			if node.ServiceAddress == host && node.ServicePort == port {
+			if node.Address == host && node.ServicePort == port {
 				found = true
 				break
 			}
 		}
 		if !found {
-			err := agent.ServiceDeregister(node.ServiceID)
+			c.Ui.Info(fmt.Sprintf("Node %s not found, removing from Consul", node.ServiceID))
+			err := c.Meta.consulAgent.RemoveService(node)
 			if err != nil {
 				c.Ui.Error(err.Error())
 			}
 		}
 	}
 
-	defer session.Close()
-	cmd := &bson.M{
-		"replSetInitiate": ""}
-	result := bson.M{}
+	// Remove dead nodes from the Replica
+	if len(dead) > 0 {
+		config := &commgo.RsConf{}
 
-	if err := session.DB("admin").Run(&cmd, &result); err != nil {
-		c.Ui.Error(err.Error())
-		return 1
+		conn := session.DB("local").C("system.replset")
+		count, err := conn.Count()
+		if count > 1 {
+			c.Ui.Error("Error: local.system.replset has unexpected contents")
+			return 1
+		}
+		err = conn.Find(bson.M{}).One(&config)
+		if err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+
+		config.Version++
+
+		for _, member := range dead {
+			c.Ui.Info(fmt.Sprintf("Removing dead host %s", member.Name))
+			for i, host := range config.Members {
+				if host.Host == member.Name {
+					config.Members = append(config.Members[:i], config.Members[i+1:]...)
+					break
+				}
+			}
+		}
+
+		cmd := &bson.M{
+			"replSetReconfig": config,
+		}
+		result := bson.M{}
+		if err := session.DB("admin").Run(&cmd, &result); err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+
 	}
-	out := fmt.Sprintf("%v", result)
-	c.Ui.Output(out)
+
 	return 0
 }
 
@@ -134,5 +164,5 @@ Clean Options:
 }
 
 func (c *CleanCommand) Synopsis() string {
-	return "Initilize a new replica set"
+	return "Remove dead nodes from Consul"
 }

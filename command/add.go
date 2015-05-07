@@ -76,43 +76,67 @@ func (c *AddCommand) Run(args []string) int {
 		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 		return 1
 	}
-	config.Version++
 
 	var max int64
 	max = 0
+	host := fmt.Sprintf("%s:%d", addr, port)
+	exists := false
 	for _, member := range config.Members {
 		if member.ID > max {
 			max = member.ID
+			if member.Host == host {
+				exists = true
+				break
+			}
 		}
 	}
-	cfg := &commgo.Host{
-		ID:          max + 1,
-		Host:        fmt.Sprintf("%s:%d", addr, port),
-		ArbiterOnly: arbitrator,
-	}
 
-	config.Members = append(config.Members, cfg)
+	if !exists {
+		config.Version++
 
-	cmd := &bson.M{
-		"replSetReconfig": config,
-	}
-	result := bson.M{}
-	if err := session.DB("admin").Run(&cmd, &result); err != nil {
-		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
-		return 1
+		cfg := &commgo.Host{
+			ID:          max + 1,
+			Host:        fmt.Sprintf("%s:%d", addr, port),
+			ArbiterOnly: arbitrator,
+		}
+
+		config.Members = append(config.Members, cfg)
+
+		cmd := &bson.M{
+			"replSetReconfig": config,
+		}
+		result := bson.M{}
+		if err := session.DB("admin").Run(&cmd, &result); err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
 	}
 
 	if c.Meta.consul {
-		err := c.Meta.consulAgent.AddService(
-			addr,
-			fmt.Sprintf("%s:%d", addr, port),
-			fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
-			"mongodb",
-			port,
-		)
+		registered, err := c.Meta.consulAgent.GetService(c.Meta.consulKey, "")
 		if err != nil {
-			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			c.Ui.Error(err.Error())
 			return 1
+		}
+		found := false
+		for _, node := range registered {
+			if node.Address == host && node.ServicePort == port {
+				found = true
+				break
+			}
+		}
+		if !found {
+			err := c.Meta.consulAgent.AddService(
+				addr,
+				fmt.Sprintf("%s:%d", addr, port),
+				fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
+				"mongodb",
+				port,
+			)
+			if err != nil {
+				c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+				return 1
+			}
 		}
 	}
 	return 0

@@ -101,25 +101,35 @@ func (c *RemoveCommand) Run(args []string) int {
 		}
 	}
 
-	if !found {
+	if found {
+		cmd := &bson.M{
+			"replSetReconfig": config,
+		}
+		result := bson.M{}
+		if err := session.DB("admin").Run(&cmd, &result); err != nil {
+			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+			return 1
+		}
+	} else {
 		c.Ui.Error(fmt.Sprintf("Node %s not found in cluster", host))
-		return 1
-	}
-
-	cmd := &bson.M{
-		"replSetReconfig": config,
-	}
-	result := bson.M{}
-	if err := session.DB("admin").Run(&cmd, &result); err != nil {
-		c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
-		return 1
 	}
 
 	if c.Meta.consul {
-		err = c.Meta.consulAgent.RemoveService(host)
+		nodes, err := c.Meta.consulAgent.GetService(c.Meta.consulKey, "")
 		if err != nil {
 			c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
 			return 1
+		}
+
+		for _, node := range nodes {
+			if node.Address == addr && node.ServicePort == port {
+				err = c.Meta.consulAgent.RemoveService(node)
+				if err != nil {
+					c.Ui.Error(fmt.Sprintf("Error: %s", err.Error()))
+					return 1
+				}
+				break
+			}
 		}
 	}
 	return 0

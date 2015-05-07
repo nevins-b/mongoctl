@@ -2,7 +2,6 @@ package consul
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/hashicorp/consul/api"
@@ -43,30 +42,39 @@ func (c *Agent) AddService(addr, id, script, name string, port int) (err error) 
 	if err != nil {
 		return err
 	}
+
 	check := api.AgentServiceCheck{
-		Script:   fmt.Sprintf("/bin/nc -zv %s %d", addr, port),
+		Script:   script,
 		Interval: "15s",
 	}
+
 	service := &api.AgentServiceRegistration{
 		Address: addr,
 		Port:    port,
-		Name:    "mongodb",
-		ID:      fmt.Sprintf("%s:%d", addr, port),
+		Name:    name,
+		ID:      id,
 		Check:   &check,
 	}
+
 	err = agent.ServiceRegister(service)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func (c *Agent) RemoveService(host string) (err error) {
-	agent, err := c.GetAgent()
+func (c *Agent) RemoveService(service *api.CatalogService) (err error) {
+	catalog, err := c.GetCatalog()
 	if err != nil {
 		return err
 	}
-	return agent.ServiceDeregister(host)
+	dereq := &api.CatalogDeregistration{
+		Node:      service.Node,
+		ServiceID: service.ServiceID,
+	}
+	_, err = catalog.Deregister(dereq, nil)
+	return err
 }
 
 func (c *Agent) GetService(name, tag string) (nodes []*api.CatalogService, err error) {

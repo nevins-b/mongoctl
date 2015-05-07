@@ -7,6 +7,21 @@ type InitOrAddCommand struct {
 }
 
 func (c *InitOrAddCommand) Run(args []string) int {
+	var priority, port int
+	var hidden, arbitrator, ec2 bool
+	var addr, username string
+	flags := c.Meta.FlagSet("initoradd", FlagSetDefault)
+	flags.Usage = func() { c.Ui.Error(c.Help()) }
+	flags.IntVar(&priority, "priority", 1, "")
+	flags.IntVar(&port, "port", 27017, "")
+	flags.StringVar(&addr, "addr", "", "")
+	flags.StringVar(&username, "username", "", "")
+	flags.BoolVar(&hidden, "hidden", false, "")
+	flags.BoolVar(&arbitrator, "arbitrator", false, "")
+	flags.BoolVar(&ec2, "ec2", false, "")
+	if err := flags.Parse(args); err != nil {
+		return 1
+	}
 
 	nodes, err := c.Meta.consulAgent.GetService(
 		c.Meta.consulKey,
